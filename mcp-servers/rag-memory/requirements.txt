@@ -1,0 +1,4 @@
+fastmcp>=0.1.0
+qdrant-client>=1.7.0
+langchain-openai>=0.0.5
+langchain>=0.1.0

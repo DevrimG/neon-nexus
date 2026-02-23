@@ -1,0 +1,85 @@
+# Global values for Neon Nexus
+global:
+  env: "production"
+
+# External Qdrant Dependency
+qdrant:
+  enabled: true
+  replicaCount: 1
+  service:
+    type: ClusterIP
+
+# Internal Microservices (Subcharts)
+frontend:
+  enabled: true
+  image:
+    repository: pontiffscopez/neon-nexus
+    tag: "frontend-latest"
+    pullPolicy: Always
+  service:
+    type: ClusterIP
+    port: 3000
+  ingress:
+    enabled: true
+    className: "nginx"
+    hosts:
+      - host: neon-nexus.local
+        paths:
+          - path: /
+            pathType: Prefix
+
+backend:
+  enabled: true
+  image:
+    repository: pontiffscopez/neon-nexus
+    tag: "backend-latest"
+    pullPolicy: Always
+  service:
+    type: ClusterIP
+    port: 8000
+  env:
+    MCP_SSE_RAG_URL: "http://neon-nexus-rag-memory.default.svc.cluster.local:8000/sse"
+    MCP_SSE_VISION_URL: "http://neon-nexus-vision.default.svc.cluster.local:8000/sse"
+    MCP_SSE_AUDIO_URL: "http://neon-nexus-audio.default.svc.cluster.local:8000/sse"
+
+rag-memory:
+  enabled: true
+  image:
+    repository: pontiffscopez/neon-nexus
+    tag: "rag-memory-latest"
+    pullPolicy: Always
+  service:
+    type: ClusterIP
+    port: 8000
+    # Long-lived HTTP connection support for SSE
+    annotations:
+      nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
+      nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
+  env:
+    QDRANT_URL: "http://neon-nexus-qdrant.default.svc.cluster.local:6333"
+
+vision:
+  enabled: true
+  image:
+    repository: pontiffscopez/neon-nexus
+    tag: "vision-latest"
+    pullPolicy: Always
+  service:
+    type: ClusterIP
+    port: 8000
+    annotations:
+      nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
+      nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
+
+audio:
+  enabled: true
+  image:
+    repository: pontiffscopez/neon-nexus
+    tag: "audio-latest"
+    pullPolicy: Always
+  service:
+    type: ClusterIP
+    port: 8000
+    annotations:
+      nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
+      nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
