@@ -13,7 +13,7 @@ qdrant:
 frontend:
   enabled: true
   image:
-    repository: pontiffscopez/neon-nexus
+    repository: swr.tr-west-1.myhuaweicloud.com/devrim/neon-nexus
     tag: "frontend-latest"
   service:
     type: ClusterIP
@@ -30,7 +30,7 @@ frontend:
 backend:
   enabled: true
   image:
-    repository: pontiffscopez/neon-nexus
+    repository: swr.tr-west-1.myhuaweicloud.com/devrim/neon-nexus
     tag: "backend-latest"
   service:
     type: ClusterIP
@@ -43,7 +43,7 @@ backend:
 rag-memory:
   enabled: true
   image:
-    repository: pontiffscopez/neon-nexus
+    repository: swr.tr-west-1.myhuaweicloud.com/devrim/neon-nexus
     tag: "rag-memory-latest"
     pullPolicy: Always
   service:
@@ -59,7 +59,7 @@ rag-memory:
 vision:
   enabled: true
   image:
-    repository: pontiffscopez/neon-nexus
+    repository: swr.tr-west-1.myhuaweicloud.com/devrim/neon-nexus
     tag: "vision-latest"
     pullPolicy: Always
   service:
@@ -72,7 +72,7 @@ vision:
 audio:
   enabled: true
   image:
-    repository: pontiffscopez/neon-nexus
+    repository: swr.tr-west-1.myhuaweicloud.com/devrim/neon-nexus
     tag: "audio-latest"
     pullPolicy: Always
   service:

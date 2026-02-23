@@ -1,0 +1,32 @@
+apiVersion: v2
+name: neon-nexus-cce
+description: A modular, containerized AI Control Center deployed on Kubernetes utilizing Model Context Protocol (MCP) and RAG.
+type: application
+version: 0.1.0
+appVersion: "1.0.0"
+
+dependencies:
+  - name: qdrant
+    version: "0.10.x"
+    repository: "https://qdrant.github.io/qdrant-helm"
+    condition: qdrant.enabled
+  - name: frontend
+    version: "0.1.0"
+    repository: ""
+    condition: frontend.enabled
+  - name: backend
+    version: "0.1.0"
+    repository: ""
+    condition: backend.enabled
+  - name: rag-memory
+    version: "0.1.0"
+    repository: ""
+    condition: rag-memory.enabled
+  - name: vision
+    version: "0.1.0"
+    repository: ""
+    condition: vision.enabled
+  - name: audio
+    version: "0.1.0"
+    repository: ""
+    condition: audio.enabled

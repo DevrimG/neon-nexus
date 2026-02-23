@@ -1,0 +1,21 @@
+dependencies:
+- name: qdrant
+  repository: https://qdrant.github.io/qdrant-helm
+  version: 0.10.1
+- name: frontend
+  repository: ""
+  version: 0.1.0
+- name: backend
+  repository: ""
+  version: 0.1.0
+- name: rag-memory
+  repository: ""
+  version: 0.1.0
+- name: vision
+  repository: ""
+  version: 0.1.0
+- name: audio
+  repository: ""
+  version: 0.1.0
+digest: sha256:3583cc01e486e91a1330893b8111dde8e27aa5254e4e979e5a28e605c6f0023b
+generated: "2026-02-23T14:31:19.891528+03:00"

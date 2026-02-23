@@ -1,0 +1,18 @@
+image:
+  repository: pontiffscopez/neon-nexus
+  tag: "frontend-latest"
+  pullPolicy: Always
+
+service:
+  type: ClusterIP
+  port: 8000
+
+ingress:
+  enabled: false
+
+env: {}
+
+annotations: {}
+
+imagePullSecrets:
+  - name: dockerhub-secret

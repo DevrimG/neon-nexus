@@ -1,0 +1,6 @@
+apiVersion: v2
+name: rag-memory
+description: A Helm chart for Neon Nexus rag-memory
+type: application
+version: 0.1.0
+appVersion: "1.0.0"
