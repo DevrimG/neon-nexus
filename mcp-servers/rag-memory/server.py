@@ -78,13 +78,36 @@ app.add_middleware(
 async def upload_document(
     file: UploadFile = File(...),
     knowledge_name: str = Form(...),
-    embedding_model: str = Form("OpenAI"),
-    rerank_model: str = Form("None"),
+    embedding_model: str = Form(""),
+    rerank_model: str = Form(""),
     category: str = Form("General"),
     chunk_size: int = Form(500),
-    chunk_overlap: int = Form(50)
+    chunk_overlap: int = Form(50),
+    api_key: str = Form(""),
+    provider: str = Form("OpenAI")
 ):
     try:
+        global embeddings
+        
+        # 0. Configure Dynamic Embeddings
+        base_url = "https://api.openai.com/v1"
+        if provider == "OpenRouter":
+            base_url = "https://openrouter.ai/api/v1"
+        elif provider == "SiliconFlow":
+            base_url = "https://api.siliconflow.cn/v1"
+        elif provider == "Kimi Moonshot":
+            base_url = "https://api.moonshot.cn/v1"
+        elif provider == "Gemini":
+            base_url = "https://generativelanguage.googleapis.com/v1beta/openai/"
+            
+        custom_embeddings = OpenAIEmbeddings(
+            openai_api_key=api_key or os.getenv("OPENAI_API_KEY", "dummy-key"),
+            model=embedding_model if embedding_model else "text-embedding-3-small",
+            openai_api_base=base_url
+        )
+        
+        # Update global embeddings context for search_documents tool
+        embeddings = custom_embeddings
         # 1. Ensure Qdrant collection exists (dimension 1536 for OpenAI)
         if not qdrant_client.collection_exists(knowledge_name):
             qdrant_client.create_collection(
@@ -120,7 +143,7 @@ async def upload_document(
         from langchain_community.vectorstores import Qdrant
         Qdrant.from_documents(
             docs,
-            embeddings,
+            custom_embeddings,
             url=QDRANT_URL,
             collection_name=knowledge_name,
             force_recreate=False

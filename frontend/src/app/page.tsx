@@ -13,8 +13,8 @@ export default function Dashboard() {
   // RAG Knowledge Base State
   const [showRAGManager, setShowRAGManager] = useState(false);
   const [kbName, setKbName] = useState("");
-  const [kbEmbeddingModel, setKbEmbeddingModel] = useState("OpenAI");
-  const [kbRerankModel, setKbRerankModel] = useState("None");
+  const [kbEmbeddingModel, setKbEmbeddingModel] = useState("");
+  const [kbRerankModel, setKbRerankModel] = useState("");
   const [kbCategory, setKbCategory] = useState("General");
   const [kbChunkSize, setKbChunkSize] = useState(500);
   const [kbChunkOverlap, setKbChunkOverlap] = useState(50);
@@ -62,6 +62,8 @@ export default function Dashboard() {
     formData.append("category", kbCategory);
     formData.append("chunk_size", kbChunkSize.toString());
     formData.append("chunk_overlap", kbChunkOverlap.toString());
+    formData.append("api_key", apiKey);
+    formData.append("provider", provider);
 
     try {
       await fetch('/api/knowledge-bases/upload', {
@@ -180,17 +182,9 @@ export default function Dashboard() {
                   <input type="text" placeholder="KNOWLEDGE NAME" value={kbName} onChange={e => setKbName(e.target.value)} className="bg-deep-black border border-dim-gray p-2 text-neon-green focus:border-neon-green outline-none uppercase" />
                   <input type="text" placeholder="CATEGORY" value={kbCategory} onChange={e => setKbCategory(e.target.value)} className="bg-deep-black border border-dim-gray p-2 text-neon-green focus:border-neon-green outline-none uppercase" />
 
-                  <select value={kbEmbeddingModel} onChange={e => setKbEmbeddingModel(e.target.value)} className="bg-deep-black border border-dim-gray p-2 text-neon-green focus:border-neon-green outline-none uppercase cursor-pointer">
-                    <option value="OpenAI">OpenAI [1536]</option>
-                    <option value="BGE-M3">BGE-M3 [1024]</option>
-                    <option value="Cohere">Cohere V3 [1024]</option>
-                  </select>
+                  <input type="text" placeholder="EMBEDDING MODEL" value={kbEmbeddingModel} onChange={e => setKbEmbeddingModel(e.target.value)} className="bg-deep-black border border-dim-gray p-2 text-neon-green focus:border-neon-green outline-none uppercase" />
 
-                  <select value={kbRerankModel} onChange={e => setKbRerankModel(e.target.value)} className="bg-deep-black border border-dim-gray p-2 text-neon-green focus:border-neon-green outline-none uppercase cursor-pointer">
-                    <option value="None">No Reranker</option>
-                    <option value="Cohere Rerank">Cohere Rerank</option>
-                    <option value="BGE Reranker">BGE Reranker</option>
-                  </select>
+                  <input type="text" placeholder="RERANKER MODEL (Optional)" value={kbRerankModel} onChange={e => setKbRerankModel(e.target.value)} className="bg-deep-black border border-dim-gray p-2 text-neon-green focus:border-neon-green outline-none uppercase" />
 
                   <div className="flex items-center gap-2 border border-dim-gray p-2 pl-3 bg-deep-black">
                     <span className="text-gray-500 w-16">CHUNK:</span>
@@ -235,13 +229,15 @@ export default function Dashboard() {
               <span>Terminal</span>
               <span className="text-xs border border-dim-gray text-gray-400 px-2 py-0.5 rounded bg-deep-black">COM_LINK</span>
             </div>
-            <select
-              value={model}
-              onChange={(e) => setModel(e.target.value)}
-              className="text-xs bg-deep-black text-neon-green border border-neon-green/50 p-1 focus:outline-none focus:border-neon-green cursor-pointer"
-            >
-              {MODELS[provider]?.map(m => <option key={m} value={m}>{m}</option>)}
-            </select>
+            {!showRAGManager && (
+              <select
+                value={model}
+                onChange={(e) => setModel(e.target.value)}
+                className="text-xs bg-deep-black text-neon-green border border-neon-green/50 p-1 focus:outline-none focus:border-neon-green cursor-pointer"
+              >
+                {MODELS[provider]?.map(m => <option key={m} value={m}>{m}</option>)}
+              </select>
+            )}
           </h2>
 
           <div className={`flex-grow overflow-auto mb-4 p-4 border border-dim-gray ${showRAGManager ? 'bg-[#111]' : 'bg-deep-black'} font-mono text-sm leading-relaxed min-h-[400px]`}>
