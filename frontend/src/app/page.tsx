@@ -3,10 +3,21 @@
 import { useState } from "react";
 
 export default function Dashboard() {
+  const [provider, setProvider] = useState("OpenAI");
+  const [model, setModel] = useState("gpt-4o");
   const [apiKey, setApiKey] = useState("");
   const [chatInput, setChatInput] = useState("");
   const [chatLog, setChatLog] = useState<{ role: string, content: string }[]>([]);
   const [file, setFile] = useState<File | null>(null);
+
+  const PROVIDERS = ["OpenAI", "OpenRouter", "Claude", "Gemini", "Kimi Moonshot"];
+  const MODELS: Record<string, string[]> = {
+    "OpenAI": ["gpt-4o", "gpt-4-turbo", "gpt-3.5-turbo"],
+    "OpenRouter": ["anthropic/claude-3-opus", "google/gemini-pro", "meta-llama/llama-3-70b-instruct"],
+    "Claude": ["claude-3-opus-20240229", "claude-3-sonnet-20240229", "claude-3-haiku-20240307"],
+    "Gemini": ["gemini-1.5-pro", "gemini-1.5-flash"],
+    "Kimi Moonshot": ["moonshot-v1-8k", "moonshot-v1-32k", "moonshot-v1-128k"]
+  };
 
   const handleChat = async () => {
     if (!chatInput) return;
@@ -43,7 +54,16 @@ export default function Dashboard() {
         </div>
 
         <div className="flex flex-col items-start md:items-end gap-1">
-          <label className="text-xs text-gray-500 uppercase tracking-wider">OPENAI_API_KEY</label>
+          <select
+            value={provider}
+            onChange={(e) => {
+              setProvider(e.target.value);
+              setModel(MODELS[e.target.value][0]);
+            }}
+            className="text-xs text-neon-green bg-deep-black border border-dim-gray uppercase tracking-wider focus:outline-none focus:border-neon-green p-1 mb-1 cursor-pointer"
+          >
+            {PROVIDERS.map(p => <option key={p} value={p}>{p.toUpperCase()}_API_KEY</option>)}
+          </select>
           <input
             type="password"
             placeholder="[ ENTER KEY ]"
@@ -114,9 +134,18 @@ export default function Dashboard() {
 
         {/* Right Column: Terminal Chat */}
         <section className="border border-dim-gray hover:border-neon-green bg-[#0a0a0a] p-4 flex flex-col lg:col-span-2 relative transition-colors shadow-[inset_0_0_20px_rgba(0,0,0,0.8)]">
-          <h2 className="text-xl text-neon-green mb-4 uppercase tracking-widest border-b border-dim-gray pb-2 flex items-center gap-3">
-            <span>Terminal</span>
-            <span className="text-xs border border-dim-gray text-gray-400 px-2 py-0.5 rounded bg-deep-black">COM_LINK</span>
+          <h2 className="text-xl text-neon-green mb-4 uppercase tracking-widest border-b border-dim-gray pb-2 flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <span>Terminal</span>
+              <span className="text-xs border border-dim-gray text-gray-400 px-2 py-0.5 rounded bg-deep-black">COM_LINK</span>
+            </div>
+            <select
+              value={model}
+              onChange={(e) => setModel(e.target.value)}
+              className="text-xs bg-deep-black text-neon-green border border-neon-green/50 p-1 focus:outline-none focus:border-neon-green cursor-pointer"
+            >
+              {MODELS[provider]?.map(m => <option key={m} value={m}>{m}</option>)}
+            </select>
           </h2>
 
           <div className="flex-grow overflow-auto mb-4 p-4 border border-dim-gray bg-deep-black font-mono text-sm leading-relaxed min-h-[400px]">
