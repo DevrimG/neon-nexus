@@ -49,6 +49,7 @@ rag-memory:
   service:
     type: ClusterIP
     port: 8000
+    apiPort: 8001
     # Long-lived HTTP connection support for SSE
     annotations:
       nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"

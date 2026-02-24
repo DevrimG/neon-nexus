@@ -26,6 +26,9 @@ spec:
             - name: http
               containerPort: {{ .Values.service.port }}
               protocol: TCP
+            - name: api
+              containerPort: {{ .Values.service.apiPort }}
+              protocol: TCP
           env:
             {{- range $key, $value := .Values.env }}
             - name: {{ $key }}

@@ -10,6 +10,17 @@ export default function Dashboard() {
   const [chatLog, setChatLog] = useState<{ role: string, content: string }[]>([]);
   const [file, setFile] = useState<File | null>(null);
 
+  // RAG Knowledge Base State
+  const [showRAGManager, setShowRAGManager] = useState(false);
+  const [kbName, setKbName] = useState("");
+  const [kbEmbeddingModel, setKbEmbeddingModel] = useState("OpenAI");
+  const [kbRerankModel, setKbRerankModel] = useState("None");
+  const [kbCategory, setKbCategory] = useState("General");
+  const [kbChunkSize, setKbChunkSize] = useState(500);
+  const [kbChunkOverlap, setKbChunkOverlap] = useState(50);
+  const [knowledgeBases, setKnowledgeBases] = useState<any[]>([]);
+  const [isUploading, setIsUploading] = useState(false);
+
   const PROVIDERS = ["OpenAI", "OpenRouter", "Claude", "Gemini", "Kimi Moonshot"];
   const MODELS: Record<string, string[]> = {
     "OpenAI": ["gpt-4o", "gpt-4-turbo", "gpt-3.5-turbo"],
@@ -17,6 +28,54 @@ export default function Dashboard() {
     "Claude": ["claude-3-opus-20240229", "claude-3-sonnet-20240229", "claude-3-haiku-20240307"],
     "Gemini": ["gemini-1.5-pro", "gemini-1.5-flash"],
     "Kimi Moonshot": ["moonshot-v1-8k", "moonshot-v1-32k", "moonshot-v1-128k"]
+  };
+
+  const fetchKnowledgeBases = async () => {
+    try {
+      const res = await fetch('/api/knowledge-bases');
+      const data = await res.json();
+      if (data.status === 'success') {
+        setKnowledgeBases(data.knowledge_bases);
+      }
+    } catch (err) {
+      console.error("Failed to fetch knowledge bases:", err);
+    }
+  };
+
+  const handleDeleteKB = async (name: string) => {
+    try {
+      await fetch(`/api/knowledge-bases/${name}`, { method: 'DELETE' });
+      fetchKnowledgeBases();
+    } catch (err) {
+      console.error("Failed to delete KB:", err);
+    }
+  };
+
+  const handleKBSubmit = async () => {
+    if (!file || !kbName) return;
+    setIsUploading(true);
+    const formData = new FormData();
+    formData.append("file", file);
+    formData.append("knowledge_name", kbName);
+    formData.append("embedding_model", kbEmbeddingModel);
+    formData.append("rerank_model", kbRerankModel);
+    formData.append("category", kbCategory);
+    formData.append("chunk_size", kbChunkSize.toString());
+    formData.append("chunk_overlap", kbChunkOverlap.toString());
+
+    try {
+      await fetch('/api/knowledge-bases/upload', {
+        method: 'POST',
+        body: formData,
+      });
+      setFile(null);
+      setKbName("");
+      fetchKnowledgeBases();
+    } catch (err) {
+      console.error("Upload failed", err);
+    } finally {
+      setIsUploading(false);
+    }
   };
 
   const handleChat = async () => {
@@ -96,8 +155,14 @@ export default function Dashboard() {
                 <span className="text-gray-300">MCP::Audio</span>
                 <span className="text-neon-green bg-neon-green/10 px-2 py-0.5 rounded text-xs border border-neon-green/30">READY</span>
               </li>
-              <li className="flex justify-between items-center text-sm">
-                <span className="text-gray-300">MCP::RAG_Memory</span>
+              <li
+                className={`flex justify-between items-center text-sm cursor-pointer p-1 -mx-1 rounded transition-colors ${showRAGManager ? 'bg-dim-gray/30 border border-dim-gray' : 'hover:bg-dim-gray/20'}`}
+                onClick={() => {
+                  setShowRAGManager(!showRAGManager);
+                  if (!showRAGManager) fetchKnowledgeBases();
+                }}
+              >
+                <span className={`${showRAGManager ? 'text-neon-red font-bold' : 'text-gray-300'}`}>MCP::RAG_Memory {showRAGManager && " (MGMT)"}</span>
                 <span className="text-neon-green bg-neon-green/10 px-2 py-0.5 rounded text-xs border border-neon-green/30">READY</span>
               </li>
             </ul>
@@ -108,26 +173,57 @@ export default function Dashboard() {
             <h2 className="text-xl text-neon-green mb-4 uppercase tracking-widest border-b border-dim-gray pb-2">
               Data Vault [RAG]
             </h2>
-            <p className="text-xs text-gray-500 mb-4">Upload intelligence for vector embedding.</p>
 
-            <div className="border-2 border-dashed border-dim-gray hover:border-neon-red transition-colors flex flex-col items-center justify-center p-6 bg-deep-black flex-grow cursor-pointer group relative">
-              <input
-                type="file"
-                className="absolute inset-0 opacity-0 cursor-pointer"
-                onChange={handleFileUpload}
-              />
-              <span className="text-neon-red group-hover:drop-shadow-[0_0_5px_rgba(255,0,60,0.8)] text-3xl font-light mb-2 transition-all">
-                +
-              </span>
-              <span className="text-xs text-gray-400 group-hover:text-neon-red transition-colors text-center px-4">
-                {file ? file.name : "SELECT OR DROP FILE"}
-              </span>
-            </div>
+            {showRAGManager ? (
+              <div className="flex flex-col gap-3 flex-grow overflow-auto">
+                <div className="grid grid-cols-2 gap-2 text-xs">
+                  <input type="text" placeholder="KNOWLEDGE NAME" value={kbName} onChange={e => setKbName(e.target.value)} className="bg-deep-black border border-dim-gray p-2 text-neon-green focus:border-neon-green outline-none uppercase" />
+                  <input type="text" placeholder="CATEGORY" value={kbCategory} onChange={e => setKbCategory(e.target.value)} className="bg-deep-black border border-dim-gray p-2 text-neon-green focus:border-neon-green outline-none uppercase" />
 
-            {file && (
-              <button className="mt-4 w-full bg-neon-red text-deep-black font-bold py-3 hover:bg-[#ff3366] transition-colors uppercase text-sm shadow-[0_0_10px_rgba(255,0,60,0.3)] hover:shadow-[0_0_15px_rgba(255,0,60,0.6)]">
-                Initialize Embedding
-              </button>
+                  <select value={kbEmbeddingModel} onChange={e => setKbEmbeddingModel(e.target.value)} className="bg-deep-black border border-dim-gray p-2 text-neon-green focus:border-neon-green outline-none uppercase cursor-pointer">
+                    <option value="OpenAI">OpenAI [1536]</option>
+                    <option value="BGE-M3">BGE-M3 [1024]</option>
+                    <option value="Cohere">Cohere V3 [1024]</option>
+                  </select>
+
+                  <select value={kbRerankModel} onChange={e => setKbRerankModel(e.target.value)} className="bg-deep-black border border-dim-gray p-2 text-neon-green focus:border-neon-green outline-none uppercase cursor-pointer">
+                    <option value="None">No Reranker</option>
+                    <option value="Cohere Rerank">Cohere Rerank</option>
+                    <option value="BGE Reranker">BGE Reranker</option>
+                  </select>
+
+                  <div className="flex items-center gap-2 border border-dim-gray p-2 pl-3 bg-deep-black">
+                    <span className="text-gray-500 w-16">CHUNK:</span>
+                    <input type="number" value={kbChunkSize} onChange={e => setKbChunkSize(Number(e.target.value))} className="bg-transparent text-neon-green outline-none w-16" />
+                  </div>
+
+                  <div className="flex items-center gap-2 border border-dim-gray p-2 pl-3 bg-deep-black">
+                    <span className="text-gray-500 w-16">OVERLAP:</span>
+                    <input type="number" value={kbChunkOverlap} onChange={e => setKbChunkOverlap(Number(e.target.value))} className="bg-transparent text-neon-green outline-none w-16" />
+                  </div>
+                </div>
+
+                <div className="border-2 border-dashed border-dim-gray hover:border-neon-red transition-colors flex flex-col items-center justify-center p-4 bg-deep-black cursor-pointer group relative my-2">
+                  <input type="file" className="absolute inset-0 opacity-0 cursor-pointer" onChange={handleFileUpload} />
+                  <span className="text-xs text-gray-400 group-hover:text-neon-red transition-colors text-center uppercase">
+                    {file ? file.name : "SELECT OR DROP PDF/TXT FILE"}
+                  </span>
+                </div>
+
+                {(file && kbName) && (
+                  <button onClick={handleKBSubmit} disabled={isUploading} className="w-full bg-neon-red text-deep-black font-bold py-2 hover:bg-[#ff3366] transition-colors uppercase text-sm shadow-[0_0_10px_rgba(255,0,60,0.3)] disabled:opacity-50">
+                    {isUploading ? "PROCESSING DATA VECTORIZATION..." : "INITIALIZE EMBEDDING PIPELINE"}
+                  </button>
+                )}
+              </div>
+            ) : (
+              // Minimal vault view when closed
+              <>
+                <p className="text-xs text-gray-500 mb-4">Click MCP::RAG_Memory above to manage Knowledge Bases.</p>
+                <div className="border border-dim-gray bg-deep-black flex-grow p-4 animate-pulse flex items-center justify-center opacity-30">
+                  <span className="text-neon-green text-xs font-mono tracking-widest">[ STANDBY ]</span>
+                </div>
+              </>
             )}
           </section>
         </div>
@@ -148,21 +244,68 @@ export default function Dashboard() {
             </select>
           </h2>
 
-          <div className="flex-grow overflow-auto mb-4 p-4 border border-dim-gray bg-deep-black font-mono text-sm leading-relaxed min-h-[400px]">
-            <div className="text-gray-500 mb-4">
-              [SYSTEM] Establishing secure connection to Neon Nexus Gateway...<br />
-              [SYSTEM] MCP Host connected.<br />
-              [SYSTEM] Awaiting input.<br />
-              =============================================
-            </div>
-            {chatLog.map((log, index) => (
-              <div key={index} className="mb-3">
-                <span className={log.role === 'ROOT' ? 'text-neon-red' : 'text-neon-green'}>
-                  {log.role}@NEXUS:~${" "}
-                </span>
-                <span className="text-gray-300 whitespace-pre-wrap">{log.content}</span>
+          <div className={`flex-grow overflow-auto mb-4 p-4 border border-dim-gray ${showRAGManager ? 'bg-[#111]' : 'bg-deep-black'} font-mono text-sm leading-relaxed min-h-[400px]`}>
+            {showRAGManager ? (
+              // Matrix/Dify Style KB Table Viewer embedded in the Terminal window
+              <div>
+                <div className="text-neon-green mb-4 border-b border-dim-gray pb-2 flex justify-between items-end">
+                  <span>[SYSTEM] Knowledge Base Inventory Activated</span>
+                  <button onClick={fetchKnowledgeBases} className="text-xs text-gray-400 hover:text-white border-b border-transparent hover:border-white uppercase tracking-wider">REFRESH</button>
+                </div>
+
+                <table className="w-full text-left text-xs border-collapse">
+                  <thead>
+                    <tr className="border-b border-neon-red/50 text-neon-red">
+                      <th className="p-2 font-normal uppercase tracking-wider">Base Name</th>
+                      <th className="p-2 font-normal uppercase tracking-wider">Qdrant Vectors</th>
+                      <th className="p-2 font-normal uppercase tracking-wider">Status</th>
+                      <th className="p-2 font-normal uppercase tracking-wider text-right">Action</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {knowledgeBases.length === 0 ? (
+                      <tr>
+                        <td colSpan={4} className="p-4 text-center text-gray-600 border-b border-dim-gray">NO ACTIVE KNOWLEDGE BASES INITIALIZED</td>
+                      </tr>
+                    ) : (
+                      knowledgeBases.map((kb) => (
+                        <tr key={kb.name} className="border-b border-dim-gray hover:bg-dim-gray/20 transition-colors">
+                          <td className="p-2 text-neon-green">{kb.name}</td>
+                          <td className="p-2 text-gray-400">{kb.vectors_count} Chunks</td>
+                          <td className="p-2 text-gray-400">{kb.status}</td>
+                          <td className="p-2 text-right">
+                            <button
+                              onClick={() => handleDeleteKB(kb.name)}
+                              className="text-red-900 hover:text-neon-red transition-colors border border-transparent hover:border-neon-red px-2 py-1 rounded"
+                            >
+                              PURGE
+                            </button>
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
               </div>
-            ))}
+            ) : (
+              // Original Chat Log
+              <>
+                <div className="text-gray-500 mb-4">
+                  [SYSTEM] Establishing secure connection to Neon Nexus Gateway...<br />
+                  [SYSTEM] MCP Host connected.<br />
+                  [SYSTEM] Awaiting input.<br />
+                  =============================================
+                </div>
+                {chatLog.map((log, index) => (
+                  <div key={index} className="mb-3">
+                    <span className={log.role === 'ROOT' ? 'text-neon-red' : 'text-neon-green'}>
+                      {log.role}@NEXUS:~${" "}
+                    </span>
+                    <span className="text-gray-300 whitespace-pre-wrap">{log.content}</span>
+                  </div>
+                ))}
+              </>
+            )}
           </div>
 
           <div className="flex gap-2 relative group">

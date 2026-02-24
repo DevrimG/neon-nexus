@@ -11,5 +11,6 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY server.py .
 
 EXPOSE 8000
+EXPOSE 8001
 
 CMD ["python", "server.py"]
