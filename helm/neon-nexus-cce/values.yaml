@@ -6,8 +6,15 @@ global:
 qdrant:
   enabled: true
   replicaCount: 1
+  image:
+    repository: swr.tr-west-1.myhuaweicloud.com/devrim/qdrant
+    tag: v1.10.1
   service:
     type: ClusterIP
+  persistence:
+    storageClassName: csi-disk
+  imagePullSecrets:
+    - name: default-secret
 
 # Internal Microservices (Subcharts)
 frontend:
@@ -15,14 +22,20 @@ frontend:
   image:
     repository: swr.tr-west-1.myhuaweicloud.com/devrim/neon-nexus
     tag: "frontend-latest"
+  imagePullSecrets:
+    - name: default-secret
   service:
-    type: ClusterIP
+    type: NodePort
     port: 3000
   ingress:
     enabled: true
-    className: "nginx"
+    className: "cce"
+    annotations:
+      kubernetes.io/elb.class: union
+      kubernetes.io/elb.id: "28673c69-6733-4986-b55e-ca40ce18fecf"
+      kubernetes.io/elb.port: "80"
     hosts:
-      - host: neon-nexus.local
+      - host: ""
         paths:
           - path: /
             pathType: Prefix
@@ -32,6 +45,8 @@ backend:
   image:
     repository: swr.tr-west-1.myhuaweicloud.com/devrim/neon-nexus
     tag: "backend-latest"
+  imagePullSecrets:
+    - name: default-secret
   service:
     type: ClusterIP
     port: 8000
@@ -46,6 +61,8 @@ rag-memory:
     repository: swr.tr-west-1.myhuaweicloud.com/devrim/neon-nexus
     tag: "rag-memory-latest"
     pullPolicy: Always
+  imagePullSecrets:
+    - name: default-secret
   service:
     type: ClusterIP
     port: 8000
@@ -62,6 +79,8 @@ vision:
     repository: swr.tr-west-1.myhuaweicloud.com/devrim/neon-nexus
     tag: "vision-latest"
     pullPolicy: Always
+  imagePullSecrets:
+    - name: default-secret
   service:
     type: ClusterIP
     port: 8000
@@ -75,6 +94,8 @@ audio:
     repository: swr.tr-west-1.myhuaweicloud.com/devrim/neon-nexus
     tag: "audio-latest"
     pullPolicy: Always
+  imagePullSecrets:
+    - name: default-secret
   service:
     type: ClusterIP
     port: 8000
