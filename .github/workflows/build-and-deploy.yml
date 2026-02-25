@@ -90,10 +90,6 @@ jobs:
           username: ${{ secrets.SWR_USERNAME }}
           password: ${{ secrets.SWR_PASSWORD }}
 
-      - name: Add enterprise image to script
-        run: |
-          echo 'IMAGES+=("langgenius/dify-enterprise:0.14.4")' >> dify_mirror.sh
-
       - name: Run Dify Mirror Script
         if: github.event_name != 'pull_request'
         run: |
