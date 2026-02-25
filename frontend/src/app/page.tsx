@@ -6,6 +6,7 @@ export default function Dashboard() {
   const [provider, setProvider] = useState("OpenAI");
   const [model, setModel] = useState("gpt-4o");
   const [apiKey, setApiKey] = useState("");
+  const [difyApiKey, setDifyApiKey] = useState("");
   const [chatInput, setChatInput] = useState("");
   const [chatLog, setChatLog] = useState<{ role: string, content: string }[]>([]);
   const [file, setFile] = useState<File | null>(null);
@@ -31,8 +32,11 @@ export default function Dashboard() {
   };
 
   const fetchKnowledgeBases = async () => {
+    if (!difyApiKey) return;
     try {
-      const res = await fetch('/api/knowledge-bases');
+      const res = await fetch('/api/knowledge-bases', {
+        headers: { 'Authorization': `Bearer ${difyApiKey}` }
+      });
       const data = await res.json();
       if (data.status === 'success') {
         setKnowledgeBases(data.knowledge_bases);
@@ -42,9 +46,13 @@ export default function Dashboard() {
     }
   };
 
-  const handleDeleteKB = async (name: string) => {
+  const handleDeleteKB = async (id: string) => {
+    if (!difyApiKey) return;
     try {
-      await fetch(`/api/knowledge-bases/${name}`, { method: 'DELETE' });
+      await fetch(`/api/knowledge-bases/${id}`, {
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${difyApiKey}` }
+      });
       fetchKnowledgeBases();
     } catch (err) {
       console.error("Failed to delete KB:", err);
@@ -52,22 +60,16 @@ export default function Dashboard() {
   };
 
   const handleKBSubmit = async () => {
-    if (!file || !kbName) return;
+    if (!file || !kbName || !difyApiKey) return;
     setIsUploading(true);
     const formData = new FormData();
     formData.append("file", file);
     formData.append("knowledge_name", kbName);
-    formData.append("embedding_model", kbEmbeddingModel);
-    formData.append("rerank_model", kbRerankModel);
-    formData.append("category", kbCategory);
-    formData.append("chunk_size", kbChunkSize.toString());
-    formData.append("chunk_overlap", kbChunkOverlap.toString());
-    formData.append("api_key", apiKey);
-    formData.append("provider", provider);
 
     try {
       await fetch('/api/knowledge-bases/upload', {
         method: 'POST',
+        headers: { 'Authorization': `Bearer ${difyApiKey}` },
         body: formData,
       });
       setFile(null);
@@ -115,23 +117,35 @@ export default function Dashboard() {
         </div>
 
         <div className="flex flex-col items-start md:items-end gap-1">
-          <select
-            value={provider}
-            onChange={(e) => {
-              setProvider(e.target.value);
-              setModel(MODELS[e.target.value][0]);
-            }}
-            className="text-xs text-neon-green bg-deep-black border border-dim-gray uppercase tracking-wider focus:outline-none focus:border-neon-green p-1 mb-1 cursor-pointer"
-          >
-            {PROVIDERS.map(p => <option key={p} value={p}>{p.toUpperCase()}_API_KEY</option>)}
-          </select>
-          <input
-            type="password"
-            placeholder="[ ENTER KEY ]"
-            value={apiKey}
-            onChange={(e) => setApiKey(e.target.value)}
-            className="bg-deep-black border border-neon-red text-neon-red px-3 py-1.5 text-sm focus:outline-none focus:shadow-[0_0_12px_rgba(255,0,60,0.6)] placeholder-red-900 transition-shadow w-64"
-          />
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-neon-green tracking-wider uppercase border border-dim-gray px-1.5 py-1 bg-deep-black mt-1">DIFY_API_KEY:</span>
+            <input
+              type="password"
+              placeholder="[ DATASET API KEY ]"
+              value={difyApiKey}
+              onChange={(e) => setDifyApiKey(e.target.value)}
+              className="bg-deep-black border border-neon-red text-neon-red px-3 py-1 text-sm focus:outline-none focus:shadow-[0_0_12px_rgba(255,0,60,0.6)] placeholder-red-900 transition-shadow w-48 mt-1"
+            />
+          </div>
+          <div className="flex items-center gap-2">
+            <select
+              value={provider}
+              onChange={(e) => {
+                setProvider(e.target.value);
+                setModel(MODELS[e.target.value][0]);
+              }}
+              className="text-xs text-neon-green bg-deep-black border border-dim-gray uppercase tracking-wider focus:outline-none focus:border-neon-green p-1 cursor-pointer h-7"
+            >
+              {PROVIDERS.map(p => <option key={p} value={p}>{p.toUpperCase()}_API</option>)}
+            </select>
+            <input
+              type="password"
+              placeholder="[ ROUTER KEY ]"
+              value={apiKey}
+              onChange={(e) => setApiKey(e.target.value)}
+              className="bg-deep-black border border-neon-red text-neon-red px-3 py-1 text-sm focus:outline-none focus:shadow-[0_0_12px_rgba(255,0,60,0.6)] placeholder-red-900 transition-shadow w-48"
+            />
+          </div>
         </div>
       </header>
 
@@ -271,7 +285,7 @@ export default function Dashboard() {
                           <td className="p-2 text-gray-400">{kb.status}</td>
                           <td className="p-2 text-right">
                             <button
-                              onClick={() => handleDeleteKB(kb.name)}
+                              onClick={() => handleDeleteKB(kb.id)}
                               className="text-red-900 hover:text-neon-red transition-colors border border-transparent hover:border-neon-red px-2 py-1 rounded"
                             >
                               PURGE
