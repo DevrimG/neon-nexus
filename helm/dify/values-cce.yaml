@@ -1,0 +1,232 @@
+# Huawei CCE Custom Overrides for Dify
+
+# 1. External DBs Disabled (Using internal ones defined below)
+externalRedis:
+  enabled: false
+
+externalRedis:
+  enabled: false
+
+# 2. Image Pulling from SWR (Using the pre-existing default secrets for CCE)
+global:
+  consoleApiDomain: "console-api.dify.local"
+  consoleWebDomain: "console-web.dify.local"
+  serviceApiDomain: "service-api.dify.local"
+  appApiDomain: "app-api.dify.local"
+  appWebDomain: "app-web.dify.local"
+  filesDomain: "files.dify.local"
+  enterpriseDomain: "enterprise.dify.local"
+  triggerDomain: "trigger.dify.local"
+
+imagePullSecrets:
+  - name: default-secret
+  - name: dockerhub-secret
+  - name: image-repo-secret
+
+# 3. Disable external vector DB (Dify spins up its own weaviate/qdrant by default if not specified)
+# We will use the built in Weaviate instead of hooking up our external one to keep Dify completely isolated
+vectorDB:
+  useExternal: false
+
+weaviate:
+  enabled: true
+  authentication:
+    apikey:
+      enabled: false
+
+# 4. Expose Dify Web UI
+# Dify Web is the administration console. We will expose it via NodePort to bind it to the ELB later
+web:
+  service:
+    type: NodePort
+    port: 3000
+    # nodePort: 30080 # Let k8s assign one dynamically unless needed
+
+# 5. Disable Nginx Ingress if CCE ELB is used directly on NodePort
+ingress:
+  enabled: false
+
+# 6. Reduce Resource Pressure (Disable enterprise plugins & heavy parsing for POC)
+unstructured:
+  enabled: false
+
+plugin_daemon:
+  enabled: false
+  
+plugin_manager:
+  enabled: false
+
+plugin_connector:
+  replicas: 0
+  
+plugin_controller:
+  replicas: 0
+
+# 7. Persistence & Storage Classes (Huawei CCE configuration)
+# CCE requires explicit storage class names. We use internal S3 to avoid block storage RWO issues.
+persistence:
+  type: s3
+  s3:
+    endpoint: "http://dify-minio:9000"
+    accessKey: "minioadmin"
+    secretKey: "NzGG+ngHuwz0xzMQ1XFt8JYCAxdrhnQ8/93LCggMt00="
+    region: "us-east-1"
+    bucketName: "dify"
+    useAwsManagedIam: false
+    useAwsS3: false
+
+weaviate:
+  nodeSelector:
+    kubernetes.io/hostname: 10.0.1.193
+  storage:
+    size: 20Gi
+    storageClassName: csi-disk
+  image:
+    registry: ""
+    repository: swr.tr-west-1.myhuaweicloud.com/devrim/dify/weaviate
+    tag: "1.24.8"
+
+# 8. SWR Image Repository Overrides & Node Selectors
+api:
+  image:
+    registry: ""
+    repository: swr.tr-west-1.myhuaweicloud.com/devrim/dify/dify-api
+    tag: "3d2aea11a30200d6bf4be3033b6b1ff63bb87ffc"
+  nodeSelector:
+    kubernetes.io/hostname: 10.0.1.193
+
+worker:
+  image:
+    registry: ""
+    repository: swr.tr-west-1.myhuaweicloud.com/devrim/dify/dify-api
+    tag: "3d2aea11a30200d6bf4be3033b6b1ff63bb87ffc"
+  nodeSelector:
+    kubernetes.io/hostname: 10.0.1.193
+
+triggerWorker:
+  image:
+    registry: ""
+    repository: swr.tr-west-1.myhuaweicloud.com/devrim/dify/dify-api
+    tag: "3d2aea11a30200d6bf4be3033b6b1ff63bb87ffc"
+  nodeSelector:
+    kubernetes.io/hostname: 10.0.1.193
+
+workerBeat:
+  image:
+    registry: ""
+    repository: swr.tr-west-1.myhuaweicloud.com/devrim/dify/dify-api
+    tag: "3d2aea11a30200d6bf4be3033b6b1ff63bb87ffc"
+  nodeSelector:
+    kubernetes.io/hostname: 10.0.1.193
+
+web:
+  image:
+    registry: ""
+    repository: swr.tr-west-1.myhuaweicloud.com/devrim/dify/dify-web
+    tag: "3d2aea11a30200d6bf4be3033b6b1ff63bb87ffc"
+  nodeSelector:
+    kubernetes.io/hostname: 10.0.1.193
+    
+enterprise:
+  enabled: false
+
+enterpriseAudit:
+  enabled: false
+
+enterpriseFrontend:
+  enabled: false
+
+gateway:
+  image:
+    registry: ""
+    repository: swr.tr-west-1.myhuaweicloud.com/devrim/dify/enterprise_gateway
+    tag: "0.14.4"
+  nodeSelector:
+    kubernetes.io/hostname: 10.0.1.193
+
+sandbox:
+  image:
+    registry: ""
+    repository: swr.tr-west-1.myhuaweicloud.com/devrim/dify/dify-sandbox
+    tag: "0.2.12"
+  nodeSelector:
+    kubernetes.io/hostname: 10.0.1.193
+
+ssrfProxy:
+  image:
+    registry: ""
+    repository: swr.tr-west-1.myhuaweicloud.com/devrim/dify/squid
+    tag: "6.13-25.04_beta"
+
+postgresql:
+  enabled: true
+  image:
+    pullSecrets:
+      - "default-secret"
+    registry: ""
+    repository: swr.tr-west-1.myhuaweicloud.com/devrim/dify/postgresql
+    tag: "15.3.0-debian-11-r7"
+  global:
+    postgresql:
+      auth:
+        postgresPassword: "dify_root_password"
+      postgresqlPassword: "dify_root_password"
+  primary:
+    nodeSelector:
+      kubernetes.io/hostname: 10.0.1.193
+    persistence:
+      enabled: true
+      storageClass: csi-disk
+      accessModes:
+        - ReadWriteOnce
+      size: 5Gi
+
+redis:
+  enabled: true
+  architecture: standalone
+  image:
+    pullSecrets:
+      - "default-secret"
+    registry: ""
+    repository: swr.tr-west-1.myhuaweicloud.com/devrim/dify/redis
+    tag: "6.2.16-debian-12-r3"
+  global:
+    redis:
+      password: "dify_root_password"
+  master:
+    nodeSelector:
+      kubernetes.io/hostname: 10.0.1.193
+    persistence:
+      enabled: true
+      storageClass: csi-disk
+      accessModes:
+        - ReadWriteOnce
+      size: 2Gi
+
+minio:
+  enabled: true
+  imagePullSecrets:
+    - name: "default-secret"
+  image:
+    registry: ""
+    repository: swr.tr-west-1.myhuaweicloud.com/devrim/dify/minio
+    tag: "RELEASE.2024-12-18T13-15-44Z"
+  mcImage:
+    registry: ""
+    repository: swr.tr-west-1.myhuaweicloud.com/devrim/dify/mc
+    tag: "RELEASE.2024-11-21T17-21-54Z"
+  nodeSelector:
+    kubernetes.io/hostname: 10.0.1.193
+  persistence:
+    enabled: true
+    storageClass: csi-disk
+    accessModes:
+      - ReadWriteOnce
+    size: 20Gi
+    
+weaviate:
+  nodeSelector:
+    kubernetes.io/hostname: 10.0.1.193
+  storage:
+    size: 20Gi
+    storageClassName: csi-disk

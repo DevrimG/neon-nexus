@@ -8,7 +8,7 @@ SWR_ORG="devrim/dify"
 IMAGES=(
     "langgenius/dify-api:3d2aea11a30200d6bf4be3033b6b1ff63bb87ffc"
     "langgenius/dify-web:3d2aea11a30200d6bf4be3033b6b1ff63bb87ffc"
-    "langgenius/postgresql:12"
+    "bitnami/postgresql:15.3.0-debian-11-r7"
     "langgenius/redis:6.2.16-debian-12-r3"
     "quay.io/minio/minio:RELEASE.2024-12-18T13-15-44Z"
     "quay.io/minio/mc:RELEASE.2024-11-21T17-21-54Z"
@@ -21,6 +21,7 @@ IMAGES=(
     "langgenius/enterprise_plugin-crd:0.14.4"
     "langgenius/enterprise_plugin-connector:0.14.4"
     "langgenius/dify-plugin-manager:0.14.4"
+    "langgenius/dify-enterprise:0.14.4"
 )
 
 # Process each image
