@@ -523,13 +523,11 @@ export default function Dashboard() {
     });
   }, [consoleToken, newTagName, runSafe]);
 
-  const applyTagBinding = useCallback(async () => {
+  const applyTagBindingChanges = useCallback(async () => {
     if (!consoleToken.trim() || !selectedDatasetId) {
-      setStatusLine("[ERR] Select dataset and provide dataset token.");
-      return;
+      throw new Error("Select dataset and provide dataset token.");
     }
 
-    await runSafe(`Applying tag bindings for ${selectedDatasetId}.`, async () => {
       const currentlyBoundRaw = await difyProxyRequest(consoleToken, `datasets/${selectedDatasetId}/tags`);
       const currentlyBound = parseArray<TagItem>(currentlyBoundRaw).map((tag) => tag.id);
 
@@ -553,8 +551,18 @@ export default function Dashboard() {
       }
 
       await loadDatasets();
+  }, [consoleToken, selectedDatasetId, selectedTagIds, loadDatasets]);
+
+  const applyTagBinding = useCallback(async () => {
+    if (!consoleToken.trim() || !selectedDatasetId) {
+      setStatusLine("[ERR] Select dataset and provide dataset token.");
+      return;
+    }
+
+    await runSafe(`Applying tag bindings for ${selectedDatasetId}.`, async () => {
+      await applyTagBindingChanges();
     });
-  }, [consoleToken, selectedDatasetId, selectedTagIds, loadDatasets, runSafe]);
+  }, [consoleToken, selectedDatasetId, applyTagBindingChanges, runSafe]);
 
   const createDataset = useCallback(async () => {
     if (!consoleToken.trim() || !newDatasetName.trim()) {
@@ -760,7 +768,7 @@ export default function Dashboard() {
         body: payload,
       });
 
-      await applyTagBinding();
+      await applyTagBindingChanges();
       await loadDatasets();
     });
   }, [
@@ -779,7 +787,7 @@ export default function Dashboard() {
     tuningTopK,
     tuningThresholdEnabled,
     tuningThreshold,
-    applyTagBinding,
+    applyTagBindingChanges,
     loadDatasets,
     runSafe,
   ]);
