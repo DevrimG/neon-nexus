@@ -46,7 +46,7 @@ export async function POST(request: Request) {
             }
         }));
 
-        const uploadReq = await fetch(`${DIFY_API_URL}/datasets/${datasetId}/document/create_by_file`, {
+        const uploadReq = await fetch(`${DIFY_API_URL}/datasets/${datasetId}/document/create-by-file`, {
             method: 'POST',
             headers: {
                 'Authorization': authHeader, // Let fetch auto-generate the multipart boundary

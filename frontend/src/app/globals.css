@@ -231,6 +231,14 @@
   grid-template-columns: 1fr 1fr 1fr;
 }
 
+.panel-grid--knowledge {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.panel-grid--knowledge-advanced {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
 .neon-btn {
   border: 1px solid rgba(0, 226, 255, 0.55);
   background: rgba(0, 40, 58, 0.72);
@@ -309,6 +317,42 @@ tbody tr:hover {
   color: #adb6ce;
 }
 
+.inline-toggle {
+  margin-top: 0.45rem;
+  min-height: 39px;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  color: #d3e2ff;
+  border: 1px solid rgba(0, 226, 255, 0.35);
+  background: rgba(5, 7, 12, 0.92);
+  padding: 0.56rem 0.65rem;
+}
+
+.tag-panel {
+  margin-top: 0.8rem;
+  border-top: 1px solid rgba(0, 226, 255, 0.25);
+  padding-top: 0.75rem;
+}
+
+.tag-wall {
+  margin-top: 0.6rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+}
+
+.tag-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  border: 1px solid rgba(255, 19, 95, 0.45);
+  background: rgba(58, 8, 25, 0.45);
+  color: #ffd7e6;
+  padding: 0.34rem 0.5rem;
+  font-size: 0.74rem;
+}
+
 .terminal-out {
   width: 100%;
   min-height: 170px;
@@ -377,7 +421,9 @@ tbody tr:hover {
   }
 
   .panel-grid--docs,
-  .panel-grid--explorer {
+  .panel-grid--explorer,
+  .panel-grid--knowledge,
+  .panel-grid--knowledge-advanced {
     grid-template-columns: 1fr;
   }
 
