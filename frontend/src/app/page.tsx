@@ -1,345 +1,698 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useMemo, useState } from "react";
+import { DifyProxyError, difyProxyRequest } from "@/lib/dify-client";
+
+type Panel = "knowledge" | "documents" | "apps" | "chat" | "workflow" | "explorer";
+
+type DatasetItem = {
+  id: string;
+  name: string;
+  indexing_technique?: string;
+  document_count?: number;
+  created_at?: string;
+};
+
+type DocumentItem = {
+  id: string;
+  name?: string;
+  indexing_status?: string;
+  word_count?: number;
+  created_at?: string;
+};
+
+type AppItem = {
+  id: string;
+  name: string;
+  mode?: string;
+  status?: string;
+  created_at?: string;
+};
+
+const PANELS: Array<{ id: Panel; label: string; subtitle: string }> = [
+  { id: "knowledge", label: "Knowledge", subtitle: "Datasets + vectors" },
+  { id: "documents", label: "Documents", subtitle: "Indexing controls" },
+  { id: "apps", label: "Apps", subtitle: "App inventory" },
+  { id: "chat", label: "Chat", subtitle: "chat-messages API" },
+  { id: "workflow", label: "Workflow", subtitle: "workflows/run API" },
+  { id: "explorer", label: "Explorer", subtitle: "Any Dify endpoint" },
+];
+
+function prettyJson(value: unknown): string {
+  try {
+    return JSON.stringify(value, null, 2);
+  } catch {
+    return String(value);
+  }
+}
+
+function parseList<T>(raw: unknown): T[] {
+  if (!raw || typeof raw !== "object") return [];
+  const payload = raw as Record<string, unknown>;
+  if (Array.isArray(payload.data)) return payload.data as T[];
+  if (Array.isArray(payload.items)) return payload.items as T[];
+  return [];
+}
+
+function formatError(error: unknown): string {
+  if (error instanceof DifyProxyError) {
+    return `HTTP ${error.status}: ${prettyJson(error.detail)}`;
+  }
+  if (error instanceof Error) {
+    return error.message;
+  }
+  return String(error);
+}
 
 export default function Dashboard() {
-  const [provider, setProvider] = useState("OpenAI");
-  const [model, setModel] = useState("gpt-4o");
-  const [apiKey, setApiKey] = useState("");
-  const [difyApiKey, setDifyApiKey] = useState("");
+  const [consoleToken, setConsoleToken] = useState("");
+  const [appToken, setAppToken] = useState("");
+  const [activePanel, setActivePanel] = useState<Panel>("knowledge");
+  const [busy, setBusy] = useState(false);
+  const [statusLine, setStatusLine] = useState("[SYS] Awaiting operator command.");
+
+  const [datasets, setDatasets] = useState<DatasetItem[]>([]);
+  const [newDatasetName, setNewDatasetName] = useState("");
+  const [datasetFile, setDatasetFile] = useState<File | null>(null);
+
+  const [selectedDatasetId, setSelectedDatasetId] = useState("");
+  const [documents, setDocuments] = useState<DocumentItem[]>([]);
+  const [documentFile, setDocumentFile] = useState<File | null>(null);
+
+  const [apps, setApps] = useState<AppItem[]>([]);
+
   const [chatInput, setChatInput] = useState("");
-  const [chatLog, setChatLog] = useState<{ role: string, content: string }[]>([]);
-  const [file, setFile] = useState<File | null>(null);
+  const [chatUser, setChatUser] = useState("neon-operator");
+  const [chatOutput, setChatOutput] = useState("{}");
 
-  // RAG Knowledge Base State
-  const [showRAGManager, setShowRAGManager] = useState(false);
-  const [kbName, setKbName] = useState("");
-  const [kbEmbeddingModel, setKbEmbeddingModel] = useState("");
-  const [kbRerankModel, setKbRerankModel] = useState("");
-  const [kbCategory, setKbCategory] = useState("General");
-  const [kbChunkSize, setKbChunkSize] = useState(500);
-  const [kbChunkOverlap, setKbChunkOverlap] = useState(50);
-  const [knowledgeBases, setKnowledgeBases] = useState<any[]>([]);
-  const [isUploading, setIsUploading] = useState(false);
+  const [workflowUser, setWorkflowUser] = useState("neon-operator");
+  const [workflowInputs, setWorkflowInputs] = useState('{"topic":"neon-nexus"}');
+  const [workflowOutput, setWorkflowOutput] = useState("{}");
 
-  const PROVIDERS = ["OpenAI", "OpenRouter", "Claude", "Gemini", "Kimi Moonshot"];
-  const MODELS: Record<string, string[]> = {
-    "OpenAI": ["gpt-4o", "gpt-4-turbo", "gpt-3.5-turbo"],
-    "OpenRouter": ["anthropic/claude-3-opus", "google/gemini-pro", "meta-llama/llama-3-70b-instruct"],
-    "Claude": ["claude-3-opus-20240229", "claude-3-sonnet-20240229", "claude-3-haiku-20240307"],
-    "Gemini": ["gemini-1.5-pro", "gemini-1.5-flash"],
-    "Kimi Moonshot": ["moonshot-v1-8k", "moonshot-v1-32k", "moonshot-v1-128k"]
-  };
+  const [explorerMethod, setExplorerMethod] = useState<"GET" | "POST" | "PUT" | "PATCH" | "DELETE">("GET");
+  const [explorerPath, setExplorerPath] = useState("datasets?page=1&limit=20");
+  const [explorerBody, setExplorerBody] = useState('{"name":"NEXUS-CYBER-KB"}');
+  const [explorerResult, setExplorerResult] = useState("{}");
+  const [explorerTokenMode, setExplorerTokenMode] = useState<"console" | "app">("console");
 
-  const fetchKnowledgeBases = async () => {
-    if (!difyApiKey) return;
-    try {
-      const res = await fetch('/api/knowledge-bases', {
-        headers: { 'Authorization': `Bearer ${difyApiKey}` }
-      });
-      const data = await res.json();
-      if (data.status === 'success') {
-        setKnowledgeBases(data.knowledge_bases);
-      }
-    } catch (err) {
-      console.error("Failed to fetch knowledge bases:", err);
-    }
-  };
+  const selectedDataset = useMemo(
+    () => datasets.find((dataset) => dataset.id === selectedDatasetId),
+    [datasets, selectedDatasetId]
+  );
 
-  const handleDeleteKB = async (id: string) => {
-    if (!difyApiKey) return;
-    try {
-      await fetch(`/api/knowledge-bases/${id}`, {
-        method: 'DELETE',
-        headers: { 'Authorization': `Bearer ${difyApiKey}` }
-      });
-      fetchKnowledgeBases();
-    } catch (err) {
-      console.error("Failed to delete KB:", err);
-    }
-  };
-
-  const handleKBSubmit = async () => {
-    if (!file || !kbName || !difyApiKey) return;
-    setIsUploading(true);
-    const formData = new FormData();
-    formData.append("file", file);
-    formData.append("knowledge_name", kbName);
+  const runSafe = useCallback(async (message: string, task: () => Promise<void>) => {
+    setBusy(true);
+    setStatusLine(`[SYS] ${message}`);
 
     try {
-      await fetch('/api/knowledge-bases/upload', {
-        method: 'POST',
-        headers: { 'Authorization': `Bearer ${difyApiKey}` },
-        body: formData,
-      });
-      setFile(null);
-      setKbName("");
-      fetchKnowledgeBases();
-    } catch (err) {
-      console.error("Upload failed", err);
+      await task();
+      setStatusLine(`[OK] ${message}`);
+    } catch (error) {
+      setStatusLine(`[ERR] ${formatError(error)}`);
     } finally {
-      setIsUploading(false);
+      setBusy(false);
     }
-  };
+  }, []);
 
-  const handleChat = async () => {
-    if (!chatInput) return;
-    setChatLog(prev => [...prev, { role: "ROOT", content: chatInput }]);
-
-    // Simulate MCP Gateway interaction mapping
-    setChatLog(prev => [...prev, { role: "NEXUS", content: "Processing request through MCP Gateway..." }]);
-
-    setTimeout(() => {
-      setChatLog(prev => [
-        ...prev.slice(0, -1),
-        { role: "NEXUS", content: "ACK. Data received. How else may I assist you?" }
-      ]);
-    }, 1500);
-    setChatInput("");
-  };
-
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files.length > 0) {
-      setFile(e.target.files[0]);
+  const loadDatasets = useCallback(async () => {
+    if (!consoleToken.trim()) {
+      setStatusLine("[ERR] Missing Dify console token.");
+      return;
     }
-  };
+
+    await runSafe("Syncing datasets from Dify.", async () => {
+      const response = await difyProxyRequest(consoleToken, "datasets", {
+        query: { page: 1, limit: 50 },
+      });
+
+      const list = parseList<DatasetItem>(response);
+      setDatasets(list);
+
+      if (list.length > 0) {
+        setSelectedDatasetId((current) => current || list[0].id);
+      }
+    });
+  }, [consoleToken, runSafe]);
+
+  const createDataset = useCallback(async () => {
+    if (!consoleToken.trim() || !newDatasetName.trim()) {
+      setStatusLine("[ERR] Dataset name or console token missing.");
+      return;
+    }
+
+    await runSafe("Creating dataset and optional file ingestion.", async () => {
+      const createResponse = (await difyProxyRequest(consoleToken, "datasets", {
+        method: "POST",
+        body: { name: newDatasetName.trim() },
+      })) as { id?: string };
+
+      const datasetId = createResponse.id;
+      if (!datasetId) {
+        throw new Error("Dify returned no dataset ID.");
+      }
+
+      if (datasetFile) {
+        const upload = new FormData();
+        upload.append("file", datasetFile);
+        upload.append(
+          "data",
+          JSON.stringify({
+            indexing_technique: "high_quality",
+            process_rule: { mode: "automatic", rules: {} },
+          })
+        );
+
+        await difyProxyRequest(consoleToken, `datasets/${datasetId}/document/create_by_file`, {
+          method: "POST",
+          body: upload,
+        });
+      }
+
+      setNewDatasetName("");
+      setDatasetFile(null);
+      await loadDatasets();
+    });
+  }, [consoleToken, newDatasetName, datasetFile, loadDatasets, runSafe]);
+
+  const deleteDataset = useCallback(
+    async (datasetId: string) => {
+      if (!consoleToken.trim()) {
+        setStatusLine("[ERR] Missing Dify console token.");
+        return;
+      }
+
+      await runSafe(`Deleting dataset ${datasetId}.`, async () => {
+        await difyProxyRequest(consoleToken, `datasets/${datasetId}`, { method: "DELETE" });
+        setDocuments([]);
+        if (datasetId === selectedDatasetId) setSelectedDatasetId("");
+        await loadDatasets();
+      });
+    },
+    [consoleToken, selectedDatasetId, loadDatasets, runSafe]
+  );
+
+  const loadDocuments = useCallback(async () => {
+    if (!consoleToken.trim() || !selectedDatasetId) {
+      setStatusLine("[ERR] Select dataset and provide console token.");
+      return;
+    }
+
+    await runSafe(`Loading documents for dataset ${selectedDatasetId}.`, async () => {
+      const response = await difyProxyRequest(consoleToken, `datasets/${selectedDatasetId}/documents`, {
+        query: { page: 1, limit: 50 },
+      });
+
+      setDocuments(parseList<DocumentItem>(response));
+    });
+  }, [consoleToken, selectedDatasetId, runSafe]);
+
+  const uploadDocument = useCallback(async () => {
+    if (!consoleToken.trim() || !selectedDatasetId || !documentFile) {
+      setStatusLine("[ERR] Missing dataset selection, file, or token.");
+      return;
+    }
+
+    await runSafe(`Uploading document into ${selectedDatasetId}.`, async () => {
+      const form = new FormData();
+      form.append("file", documentFile);
+      form.append(
+        "data",
+        JSON.stringify({
+          indexing_technique: "high_quality",
+          process_rule: { mode: "automatic", rules: {} },
+        })
+      );
+
+      await difyProxyRequest(consoleToken, `datasets/${selectedDatasetId}/document/create_by_file`, {
+        method: "POST",
+        body: form,
+      });
+
+      setDocumentFile(null);
+      await loadDocuments();
+    });
+  }, [consoleToken, selectedDatasetId, documentFile, loadDocuments, runSafe]);
+
+  const deleteDocument = useCallback(
+    async (documentId: string) => {
+      if (!consoleToken.trim() || !selectedDatasetId) {
+        setStatusLine("[ERR] Missing dataset selection or token.");
+        return;
+      }
+
+      await runSafe(`Deleting document ${documentId}.`, async () => {
+        await difyProxyRequest(consoleToken, `datasets/${selectedDatasetId}/documents/${documentId}`, {
+          method: "DELETE",
+        });
+        await loadDocuments();
+      });
+    },
+    [consoleToken, selectedDatasetId, loadDocuments, runSafe]
+  );
+
+  const loadApps = useCallback(async () => {
+    if (!consoleToken.trim()) {
+      setStatusLine("[ERR] Missing Dify console token.");
+      return;
+    }
+
+    await runSafe("Syncing app inventory.", async () => {
+      const response = await difyProxyRequest(consoleToken, "apps", { query: { page: 1, limit: 50 } });
+      setApps(parseList<AppItem>(response));
+    });
+  }, [consoleToken, runSafe]);
+
+  const sendChatMessage = useCallback(async () => {
+    const token = (appToken.trim() || consoleToken.trim()).trim();
+    if (!token || !chatInput.trim()) {
+      setStatusLine("[ERR] Missing chat token or prompt.");
+      return;
+    }
+
+    await runSafe("Dispatching chat-messages request.", async () => {
+      const response = await difyProxyRequest(token, "chat-messages", {
+        method: "POST",
+        body: {
+          query: chatInput,
+          inputs: {},
+          response_mode: "blocking",
+          user: chatUser || "neon-operator",
+        },
+      });
+
+      setChatOutput(prettyJson(response));
+      setChatInput("");
+    });
+  }, [appToken, consoleToken, chatInput, chatUser, runSafe]);
+
+  const runWorkflow = useCallback(async () => {
+    const token = (appToken.trim() || consoleToken.trim()).trim();
+    if (!token) {
+      setStatusLine("[ERR] Missing workflow token.");
+      return;
+    }
+
+    let inputs: Record<string, unknown> = {};
+    if (workflowInputs.trim()) {
+      try {
+        const parsed = JSON.parse(workflowInputs);
+        if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+          inputs = parsed as Record<string, unknown>;
+        }
+      } catch {
+        throw new Error("Workflow inputs must be valid JSON object.");
+      }
+    }
+
+    await runSafe("Dispatching workflows/run request.", async () => {
+      const response = await difyProxyRequest(token, "workflows/run", {
+        method: "POST",
+        body: {
+          inputs,
+          response_mode: "blocking",
+          user: workflowUser || "neon-operator",
+        },
+      });
+
+      setWorkflowOutput(prettyJson(response));
+    });
+  }, [appToken, consoleToken, workflowInputs, workflowUser, runSafe]);
+
+  const runExplorer = useCallback(async () => {
+    const token = explorerTokenMode === "app" ? (appToken.trim() || consoleToken.trim()) : consoleToken.trim();
+    if (!token) {
+      setStatusLine("[ERR] Missing token for endpoint explorer.");
+      return;
+    }
+
+    const normalized = explorerPath.trim().replace(/^\/+/, "");
+    if (!normalized) {
+      setStatusLine("[ERR] Explorer path is required.");
+      return;
+    }
+
+    let body: unknown;
+    if (explorerMethod !== "GET" && explorerMethod !== "DELETE" && explorerBody.trim()) {
+      try {
+        body = JSON.parse(explorerBody);
+      } catch {
+        setStatusLine("[ERR] Explorer body must be valid JSON.");
+        return;
+      }
+    }
+
+    await runSafe(`Proxying ${explorerMethod} ${normalized}`, async () => {
+      const response = await difyProxyRequest(token, normalized, {
+        method: explorerMethod,
+        body,
+      });
+      setExplorerResult(prettyJson(response));
+    });
+  }, [appToken, consoleToken, explorerTokenMode, explorerPath, explorerMethod, explorerBody, runSafe]);
 
   return (
-    <div className="min-h-screen p-8 max-w-7xl mx-auto flex flex-col gap-6 font-mono selection:bg-neon-red selection:text-white">
-
-      {/* Header */}
-      <header className="border-b-2 border-neon-green pb-4 flex flex-col md:flex-row justify-between items-start md:items-end gap-4 shadow-[0_4px_15px_-3px_rgba(0,255,65,0.2)]">
+    <div className="dashboard-shell">
+      <div className="scanline" />
+      <header className="topbar">
         <div>
-          <h1 className="text-5xl font-bold tracking-tighter text-neon-red drop-shadow-[0_0_8px_rgba(255,0,60,0.8)]" style={{ textShadow: "0 0 8px rgba(255,0,60,0.8)" }}>
-            NEON//NEXUS
-          </h1>
-          <p className="text-sm text-neon-green mt-1 tracking-widest uppercase">:: AI Control Center _v1.0.0</p>
+          <p className="micro-label">NEON//NEXUS</p>
+          <h1 className="title">DIFY COMMAND DECK</h1>
+          <p className="subtitle">Cyberpunk 2077 styled control surface for Dify backend operations.</p>
         </div>
-
-        <div className="flex flex-col items-start md:items-end gap-1">
-          <div className="flex items-center gap-2">
-            <span className="text-xs text-neon-green tracking-wider uppercase border border-dim-gray px-1.5 py-1 bg-deep-black mt-1">DIFY_API_KEY:</span>
-            <input
-              type="password"
-              placeholder="[ DATASET API KEY ]"
-              value={difyApiKey}
-              onChange={(e) => setDifyApiKey(e.target.value)}
-              className="bg-deep-black border border-neon-red text-neon-red px-3 py-1 text-sm focus:outline-none focus:shadow-[0_0_12px_rgba(255,0,60,0.6)] placeholder-red-900 transition-shadow w-48 mt-1"
-            />
-          </div>
-          <div className="flex items-center gap-2">
-            <select
-              value={provider}
-              onChange={(e) => {
-                setProvider(e.target.value);
-                setModel(MODELS[e.target.value][0]);
-              }}
-              className="text-xs text-neon-green bg-deep-black border border-dim-gray uppercase tracking-wider focus:outline-none focus:border-neon-green p-1 cursor-pointer h-7"
-            >
-              {PROVIDERS.map(p => <option key={p} value={p}>{p.toUpperCase()}_API</option>)}
-            </select>
-            <input
-              type="password"
-              placeholder="[ ROUTER KEY ]"
-              value={apiKey}
-              onChange={(e) => setApiKey(e.target.value)}
-              className="bg-deep-black border border-neon-red text-neon-red px-3 py-1 text-sm focus:outline-none focus:shadow-[0_0_12px_rgba(255,0,60,0.6)] placeholder-red-900 transition-shadow w-48"
-            />
-          </div>
+        <div className="status-box">
+          <span className="status-dot" />
+          <span>{busy ? "RUNNING" : "IDLE"}</span>
         </div>
       </header>
 
-      {/* Main Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 flex-grow">
-
-        {/* Left Column: AI Modules & Data Vault */}
-        <div className="flex flex-col gap-6 lg:col-span-1">
-
-          {/* Modules List */}
-          <section className="border border-dim-gray bg-[#0a0a0a] p-4 relative overflow-hidden group hover:border-neon-green transition-colors">
-            <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-neon-red to-transparent opacity-50"></div>
-            <h2 className="text-xl text-neon-red mb-4 uppercase tracking-widest border-b border-dim-gray pb-2 flex items-center justify-between">
-              <span>Active Modules</span>
-              <span className="text-xs text-neon-green animate-pulse">● ONLINE</span>
-            </h2>
-            <ul className="space-y-3">
-              <li className="flex justify-between items-center text-sm">
-                <span className="text-gray-300">MCP::Vision</span>
-                <span className="text-neon-green bg-neon-green/10 px-2 py-0.5 rounded text-xs border border-neon-green/30">READY</span>
-              </li>
-              <li className="flex justify-between items-center text-sm">
-                <span className="text-gray-300">MCP::Audio</span>
-                <span className="text-neon-green bg-neon-green/10 px-2 py-0.5 rounded text-xs border border-neon-green/30">READY</span>
-              </li>
-              <li
-                className={`flex justify-between items-center text-sm cursor-pointer p-1 -mx-1 rounded transition-colors ${showRAGManager ? 'bg-dim-gray/30 border border-dim-gray' : 'hover:bg-dim-gray/20'}`}
-                onClick={() => {
-                  setShowRAGManager(!showRAGManager);
-                  if (!showRAGManager) fetchKnowledgeBases();
-                }}
-              >
-                <span className={`${showRAGManager ? 'text-neon-red font-bold' : 'text-gray-300'}`}>MCP::RAG_Memory {showRAGManager && " (MGMT)"}</span>
-                <span className="text-neon-green bg-neon-green/10 px-2 py-0.5 rounded text-xs border border-neon-green/30">READY</span>
-              </li>
-            </ul>
+      <main className="dashboard-grid">
+        <aside className="left-rail">
+          <section className="card">
+            <p className="card-label">Control Plane Token</p>
+            <input
+              type="password"
+              value={consoleToken}
+              onChange={(event) => setConsoleToken(event.target.value)}
+              placeholder="Bearer token for /v1 datasets + management"
+              className="neon-input"
+            />
+            <p className="card-label mt-4">App Runtime Token</p>
+            <input
+              type="password"
+              value={appToken}
+              onChange={(event) => setAppToken(event.target.value)}
+              placeholder="Optional app token for chat/workflow"
+              className="neon-input"
+            />
           </section>
 
-          {/* Data Vault */}
-          <section className="border border-dim-gray bg-[#0a0a0a] p-4 relative hover:border-neon-green transition-colors flex-grow flex flex-col">
-            <h2 className="text-xl text-neon-green mb-4 uppercase tracking-widest border-b border-dim-gray pb-2">
-              Data Vault [RAG]
-            </h2>
-
-            {showRAGManager ? (
-              <div className="flex flex-col gap-3 flex-grow overflow-auto">
-                <div className="grid grid-cols-2 gap-2 text-xs">
-                  <input type="text" placeholder="KNOWLEDGE NAME" value={kbName} onChange={e => setKbName(e.target.value)} className="bg-deep-black border border-dim-gray p-2 text-neon-green focus:border-neon-green outline-none uppercase" />
-                  <input type="text" placeholder="CATEGORY" value={kbCategory} onChange={e => setKbCategory(e.target.value)} className="bg-deep-black border border-dim-gray p-2 text-neon-green focus:border-neon-green outline-none uppercase" />
-
-                  <input type="text" placeholder="EMBEDDING MODEL" value={kbEmbeddingModel} onChange={e => setKbEmbeddingModel(e.target.value)} className="bg-deep-black border border-dim-gray p-2 text-neon-green focus:border-neon-green outline-none uppercase" />
-
-                  <input type="text" placeholder="RERANKER MODEL (Optional)" value={kbRerankModel} onChange={e => setKbRerankModel(e.target.value)} className="bg-deep-black border border-dim-gray p-2 text-neon-green focus:border-neon-green outline-none uppercase" />
-
-                  <div className="flex items-center gap-2 border border-dim-gray p-2 pl-3 bg-deep-black">
-                    <span className="text-gray-500 w-16">CHUNK:</span>
-                    <input type="number" value={kbChunkSize} onChange={e => setKbChunkSize(Number(e.target.value))} className="bg-transparent text-neon-green outline-none w-16" />
-                  </div>
-
-                  <div className="flex items-center gap-2 border border-dim-gray p-2 pl-3 bg-deep-black">
-                    <span className="text-gray-500 w-16">OVERLAP:</span>
-                    <input type="number" value={kbChunkOverlap} onChange={e => setKbChunkOverlap(Number(e.target.value))} className="bg-transparent text-neon-green outline-none w-16" />
-                  </div>
-                </div>
-
-                <div className="border-2 border-dashed border-dim-gray hover:border-neon-red transition-colors flex flex-col items-center justify-center p-4 bg-deep-black cursor-pointer group relative my-2">
-                  <input type="file" className="absolute inset-0 opacity-0 cursor-pointer" onChange={handleFileUpload} />
-                  <span className="text-xs text-gray-400 group-hover:text-neon-red transition-colors text-center uppercase">
-                    {file ? file.name : "SELECT OR DROP PDF/TXT FILE"}
-                  </span>
-                </div>
-
-                {(file && kbName) && (
-                  <button onClick={handleKBSubmit} disabled={isUploading} className="w-full bg-neon-red text-deep-black font-bold py-2 hover:bg-[#ff3366] transition-colors uppercase text-sm shadow-[0_0_10px_rgba(255,0,60,0.3)] disabled:opacity-50">
-                    {isUploading ? "PROCESSING DATA VECTORIZATION..." : "INITIALIZE EMBEDDING PIPELINE"}
-                  </button>
-                )}
-              </div>
-            ) : (
-              // Minimal vault view when closed
-              <>
-                <p className="text-xs text-gray-500 mb-4">Click MCP::RAG_Memory above to manage Knowledge Bases.</p>
-                <div className="border border-dim-gray bg-deep-black flex-grow p-4 animate-pulse flex items-center justify-center opacity-30">
-                  <span className="text-neon-green text-xs font-mono tracking-widest">[ STANDBY ]</span>
-                </div>
-              </>
-            )}
-          </section>
-        </div>
-
-        {/* Right Column: Terminal Chat */}
-        <section className="border border-dim-gray hover:border-neon-green bg-[#0a0a0a] p-4 flex flex-col lg:col-span-2 relative transition-colors shadow-[inset_0_0_20px_rgba(0,0,0,0.8)]">
-          <h2 className="text-xl text-neon-green mb-4 uppercase tracking-widest border-b border-dim-gray pb-2 flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <span>Terminal</span>
-              <span className="text-xs border border-dim-gray text-gray-400 px-2 py-0.5 rounded bg-deep-black">COM_LINK</span>
+          <section className="card">
+            <p className="card-label">Systems</p>
+            <div className="rail-list">
+              {PANELS.map((panel) => (
+                <button
+                  key={panel.id}
+                  onClick={() => setActivePanel(panel.id)}
+                  className={`rail-item ${activePanel === panel.id ? "active" : ""}`}
+                >
+                  <span>{panel.label}</span>
+                  <small>{panel.subtitle}</small>
+                </button>
+              ))}
             </div>
-            {!showRAGManager && (
-              <select
-                value={model}
-                onChange={(e) => setModel(e.target.value)}
-                className="text-xs bg-deep-black text-neon-green border border-neon-green/50 p-1 focus:outline-none focus:border-neon-green cursor-pointer"
-              >
-                {MODELS[provider]?.map(m => <option key={m} value={m}>{m}</option>)}
-              </select>
-            )}
-          </h2>
+          </section>
 
-          <div className={`flex-grow overflow-auto mb-4 p-4 border border-dim-gray ${showRAGManager ? 'bg-[#111]' : 'bg-deep-black'} font-mono text-sm leading-relaxed min-h-[400px]`}>
-            {showRAGManager ? (
-              // Matrix/Dify Style KB Table Viewer embedded in the Terminal window
-              <div>
-                <div className="text-neon-green mb-4 border-b border-dim-gray pb-2 flex justify-between items-end">
-                  <span>[SYSTEM] Knowledge Base Inventory Activated</span>
-                  <button onClick={fetchKnowledgeBases} className="text-xs text-gray-400 hover:text-white border-b border-transparent hover:border-white uppercase tracking-wider">REFRESH</button>
-                </div>
+          <section className="card">
+            <p className="card-label">System Feed</p>
+            <pre className="terminal-feed">{statusLine}</pre>
+          </section>
+        </aside>
 
-                <table className="w-full text-left text-xs border-collapse">
+        <section className="main-panel">
+          {activePanel === "knowledge" && (
+            <div className="card panel">
+              <div className="panel-head">
+                <h2>Knowledge Bases</h2>
+                <button className="neon-btn" onClick={loadDatasets} disabled={busy}>
+                  Refresh
+                </button>
+              </div>
+
+              <div className="panel-grid">
+                <input
+                  className="neon-input"
+                  placeholder="Dataset name"
+                  value={newDatasetName}
+                  onChange={(event) => setNewDatasetName(event.target.value)}
+                />
+                <input
+                  className="neon-input"
+                  type="file"
+                  onChange={(event) => setDatasetFile(event.target.files?.[0] ?? null)}
+                />
+                <button className="neon-btn neon-btn--pink" onClick={createDataset} disabled={busy}>
+                  Create / Upload
+                </button>
+              </div>
+
+              <div className="table-wrap">
+                <table>
                   <thead>
-                    <tr className="border-b border-neon-red/50 text-neon-red">
-                      <th className="p-2 font-normal uppercase tracking-wider">Base Name</th>
-                      <th className="p-2 font-normal uppercase tracking-wider">Qdrant Vectors</th>
-                      <th className="p-2 font-normal uppercase tracking-wider">Status</th>
-                      <th className="p-2 font-normal uppercase tracking-wider text-right">Action</th>
+                    <tr>
+                      <th>Name</th>
+                      <th>Technique</th>
+                      <th>Docs</th>
+                      <th />
                     </tr>
                   </thead>
                   <tbody>
-                    {knowledgeBases.length === 0 ? (
+                    {datasets.length === 0 && (
                       <tr>
-                        <td colSpan={4} className="p-4 text-center text-gray-600 border-b border-dim-gray">NO ACTIVE KNOWLEDGE BASES INITIALIZED</td>
+                        <td colSpan={4} className="empty-row">
+                          No datasets loaded.
+                        </td>
                       </tr>
-                    ) : (
-                      knowledgeBases.map((kb) => (
-                        <tr key={kb.name} className="border-b border-dim-gray hover:bg-dim-gray/20 transition-colors">
-                          <td className="p-2 text-neon-green">{kb.name}</td>
-                          <td className="p-2 text-gray-400">{kb.vectors_count} Chunks</td>
-                          <td className="p-2 text-gray-400">{kb.status}</td>
-                          <td className="p-2 text-right">
-                            <button
-                              onClick={() => handleDeleteKB(kb.id)}
-                              className="text-red-900 hover:text-neon-red transition-colors border border-transparent hover:border-neon-red px-2 py-1 rounded"
-                            >
-                              PURGE
-                            </button>
-                          </td>
-                        </tr>
-                      ))
                     )}
+                    {datasets.map((dataset) => (
+                      <tr key={dataset.id}>
+                        <td>{dataset.name}</td>
+                        <td>{dataset.indexing_technique ?? "-"}</td>
+                        <td>{dataset.document_count ?? 0}</td>
+                        <td>
+                          <div className="row-actions">
+                            <button
+                              onClick={() => {
+                                setSelectedDatasetId(dataset.id);
+                                setActivePanel("documents");
+                              }}
+                            >
+                              Docs
+                            </button>
+                            <button onClick={() => deleteDataset(dataset.id)}>Delete</button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
                   </tbody>
                 </table>
               </div>
-            ) : (
-              // Original Chat Log
-              <>
-                <div className="text-gray-500 mb-4">
-                  [SYSTEM] Establishing secure connection to Neon Nexus Gateway...<br />
-                  [SYSTEM] MCP Host connected.<br />
-                  [SYSTEM] Awaiting input.<br />
-                  =============================================
-                </div>
-                {chatLog.map((log, index) => (
-                  <div key={index} className="mb-3">
-                    <span className={log.role === 'ROOT' ? 'text-neon-red' : 'text-neon-green'}>
-                      {log.role}@NEXUS:~${" "}
-                    </span>
-                    <span className="text-gray-300 whitespace-pre-wrap">{log.content}</span>
-                  </div>
-                ))}
-              </>
-            )}
-          </div>
+            </div>
+          )}
 
-          <div className="flex gap-2 relative group">
-            <span className="absolute left-4 top-1/2 -translate-y-1/2 text-neon-red font-bold">
-              &gt;
-            </span>
-            <input
-              type="text"
-              value={chatInput}
-              onChange={(e) => setChatInput(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && handleChat()}
-              placeholder="Execute command..."
-              className="w-full bg-[#111] border border-neon-red text-neon-green pl-10 pr-4 py-4 input-glow focus:outline-none focus:border-neon-green transition-all font-mono"
-            />
-            <button
-              onClick={handleChat}
-              className="bg-neon-red text-deep-black px-8 font-bold hover:bg-neon-green transition-colors uppercase shadow-[0_0_10px_rgba(255,0,60,0.4)]"
-            >
-              Send
-            </button>
-          </div>
+          {activePanel === "documents" && (
+            <div className="card panel">
+              <div className="panel-head">
+                <h2>Documents</h2>
+                <button className="neon-btn" onClick={loadDocuments} disabled={busy}>
+                  Refresh
+                </button>
+              </div>
+
+              <div className="panel-grid panel-grid--docs">
+                <select
+                  className="neon-input"
+                  value={selectedDatasetId}
+                  onChange={(event) => setSelectedDatasetId(event.target.value)}
+                >
+                  <option value="">Select dataset</option>
+                  {datasets.map((dataset) => (
+                    <option key={dataset.id} value={dataset.id}>
+                      {dataset.name}
+                    </option>
+                  ))}
+                </select>
+                <input
+                  className="neon-input"
+                  type="file"
+                  onChange={(event) => setDocumentFile(event.target.files?.[0] ?? null)}
+                />
+                <button className="neon-btn neon-btn--pink" onClick={uploadDocument} disabled={busy}>
+                  Upload Document
+                </button>
+              </div>
+
+              <p className="caption">Selected dataset: {selectedDataset?.name ?? "none"}</p>
+
+              <div className="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Name</th>
+                      <th>Status</th>
+                      <th>Words</th>
+                      <th />
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {documents.length === 0 && (
+                      <tr>
+                        <td colSpan={4} className="empty-row">
+                          No documents loaded.
+                        </td>
+                      </tr>
+                    )}
+                    {documents.map((document) => (
+                      <tr key={document.id}>
+                        <td>{document.name ?? document.id}</td>
+                        <td>{document.indexing_status ?? "-"}</td>
+                        <td>{document.word_count ?? 0}</td>
+                        <td>
+                          <button className="flat-btn" onClick={() => deleteDocument(document.id)}>
+                            Delete
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {activePanel === "apps" && (
+            <div className="card panel">
+              <div className="panel-head">
+                <h2>App Inventory</h2>
+                <button className="neon-btn" onClick={loadApps} disabled={busy}>
+                  Refresh
+                </button>
+              </div>
+              <div className="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Name</th>
+                      <th>Mode</th>
+                      <th>Status</th>
+                      <th>ID</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {apps.length === 0 && (
+                      <tr>
+                        <td colSpan={4} className="empty-row">
+                          No apps loaded.
+                        </td>
+                      </tr>
+                    )}
+                    {apps.map((app) => (
+                      <tr key={app.id}>
+                        <td>{app.name}</td>
+                        <td>{app.mode ?? "-"}</td>
+                        <td>{app.status ?? "-"}</td>
+                        <td>{app.id}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {activePanel === "chat" && (
+            <div className="card panel">
+              <div className="panel-head">
+                <h2>Chat Connector</h2>
+                <button className="neon-btn neon-btn--pink" onClick={sendChatMessage} disabled={busy}>
+                  Send
+                </button>
+              </div>
+              <div className="panel-grid">
+                <input
+                  className="neon-input"
+                  value={chatUser}
+                  onChange={(event) => setChatUser(event.target.value)}
+                  placeholder="user id"
+                />
+                <input
+                  className="neon-input"
+                  value={chatInput}
+                  onChange={(event) => setChatInput(event.target.value)}
+                  placeholder="chat prompt"
+                />
+              </div>
+              <textarea className="terminal-out" value={chatOutput} readOnly />
+            </div>
+          )}
+
+          {activePanel === "workflow" && (
+            <div className="card panel">
+              <div className="panel-head">
+                <h2>Workflow Runner</h2>
+                <button className="neon-btn neon-btn--pink" onClick={runWorkflow} disabled={busy}>
+                  Run
+                </button>
+              </div>
+              <div className="panel-grid">
+                <input
+                  className="neon-input"
+                  value={workflowUser}
+                  onChange={(event) => setWorkflowUser(event.target.value)}
+                  placeholder="user id"
+                />
+              </div>
+              <textarea
+                className="terminal-out"
+                value={workflowInputs}
+                onChange={(event) => setWorkflowInputs(event.target.value)}
+              />
+              <textarea className="terminal-out mt-2" value={workflowOutput} readOnly />
+            </div>
+          )}
+
+          {activePanel === "explorer" && (
+            <div className="card panel">
+              <div className="panel-head">
+                <h2>Endpoint Explorer</h2>
+                <button className="neon-btn neon-btn--pink" onClick={runExplorer} disabled={busy}>
+                  Execute
+                </button>
+              </div>
+              <div className="panel-grid panel-grid--explorer">
+                <select
+                  className="neon-input"
+                  value={explorerMethod}
+                  onChange={(event) =>
+                    setExplorerMethod(event.target.value as "GET" | "POST" | "PUT" | "PATCH" | "DELETE")
+                  }
+                >
+                  <option value="GET">GET</option>
+                  <option value="POST">POST</option>
+                  <option value="PUT">PUT</option>
+                  <option value="PATCH">PATCH</option>
+                  <option value="DELETE">DELETE</option>
+                </select>
+                <select
+                  className="neon-input"
+                  value={explorerTokenMode}
+                  onChange={(event) => setExplorerTokenMode(event.target.value as "console" | "app")}
+                >
+                  <option value="console">Console Token</option>
+                  <option value="app">App Token</option>
+                </select>
+                <input
+                  className="neon-input"
+                  value={explorerPath}
+                  onChange={(event) => setExplorerPath(event.target.value)}
+                  placeholder="datasets?page=1&limit=20"
+                />
+              </div>
+              <textarea
+                className="terminal-out"
+                value={explorerBody}
+                onChange={(event) => setExplorerBody(event.target.value)}
+              />
+              <textarea className="terminal-out mt-2" value={explorerResult} readOnly />
+              <div className="quick-links">
+                <button onClick={() => setExplorerPath("datasets?page=1&limit=20")}>GET datasets</button>
+                <button onClick={() => setExplorerPath("apps?page=1&limit=20")}>GET apps</button>
+                <button onClick={() => setExplorerPath("chat-messages")}>POST chat-messages</button>
+                <button onClick={() => setExplorerPath("workflows/run")}>POST workflows/run</button>
+              </div>
+            </div>
+          )}
         </section>
-
-      </div>
+      </main>
     </div>
   );
 }

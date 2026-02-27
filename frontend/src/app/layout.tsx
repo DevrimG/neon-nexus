@@ -2,8 +2,8 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Neon Nexus | Control Center",
-  description: "Cyberpunk Advanced AI Control Center powered by MCP & RAG",
+  title: "Neon Nexus | Dify Command Deck",
+  description: "Cyberpunk 2077 inspired Dify operations dashboard",
 };
 
 export default function RootLayout({
@@ -13,9 +13,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body className="antialiased min-h-screen">
-        {children}
-      </body>
+      <body className="antialiased min-h-screen">{children}</body>
     </html>
   );
 }

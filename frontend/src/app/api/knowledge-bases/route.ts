@@ -1,6 +1,17 @@
 import { NextResponse } from 'next/server';
 
-const DIFY_API_URL = process.env.DIFY_API_URL || 'http://dify-api.dify-system.svc.cluster.local:5001/v1';
+const DIFY_API_URL = process.env.DIFY_API_URL || 'http://dify-api-svc.dify-system.svc.cluster.local:5001/v1';
+
+type DifyDataset = {
+    id: string;
+    name: string;
+    document_count?: number;
+    indexing_technique?: string;
+};
+
+type DifyDatasetResponse = {
+    data?: DifyDataset[];
+};
 
 export async function GET(request: Request) {
     // Extract API Key from headers (passed by the frontend UI)
@@ -23,13 +34,13 @@ export async function GET(request: Request) {
             throw new Error(`Dify API error: ${res.status} - ${errorText}`);
         }
 
-        const data = await res.json();
+        const data = (await res.json()) as DifyDatasetResponse;
 
         // Map Dify's layout to our UI's expectation
-        const formattedBases = data.data.map((ds: any) => ({
+        const formattedBases = (data.data ?? []).map((ds) => ({
             name: ds.name,
             id: ds.id,
-            vectors_count: ds.document_count,
+            vectors_count: ds.document_count ?? 0,
             status: ds.indexing_technique ? "INDEXED" : "PENDING"
         }));
 
@@ -37,8 +48,9 @@ export async function GET(request: Request) {
             status: 'success',
             knowledge_bases: formattedBases
         });
-    } catch (error: any) {
+    } catch (error: unknown) {
         console.error('Error fetching datasets:', error);
-        return NextResponse.json({ error: error.message }, { status: 500 });
+        const message = error instanceof Error ? error.message : 'Unknown error';
+        return NextResponse.json({ error: message }, { status: 500 });
     }
 }

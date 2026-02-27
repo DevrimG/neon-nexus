@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 
-const DIFY_API_URL = process.env.DIFY_API_URL || 'http://dify-api.dify-system.svc.cluster.local:5001/v1';
+const DIFY_API_URL = process.env.DIFY_API_URL || 'http://dify-api-svc.dify-system.svc.cluster.local:5001/v1';
 
 export async function POST(request: Request) {
     const authHeader = request.headers.get('Authorization');
@@ -69,8 +69,9 @@ export async function POST(request: Request) {
             document: docData.document.id
         });
 
-    } catch (error: any) {
+    } catch (error: unknown) {
         console.error('Error in upload route:', error);
-        return NextResponse.json({ error: error.message }, { status: 500 });
+        const message = error instanceof Error ? error.message : 'Unknown error';
+        return NextResponse.json({ error: message }, { status: 500 });
     }
 }
