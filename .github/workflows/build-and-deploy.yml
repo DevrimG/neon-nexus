@@ -120,16 +120,46 @@ jobs:
         env:
           CCE_KUBECONFIG_B64: ${{ secrets.CCE_KUBECONFIG_B64 }}
           CCE_KUBECONFIG: ${{ secrets.CCE_KUBECONFIG }}
+          KUBECONFIG_B64: ${{ secrets.KUBECONFIG_B64 }}
+          KUBECONFIG: ${{ secrets.KUBECONFIG }}
+          KUBE_CONFIG_B64: ${{ secrets.KUBE_CONFIG_B64 }}
+          KUBE_CONFIG: ${{ secrets.KUBE_CONFIG }}
         run: |
           mkdir -p "$HOME/.kube"
+
+          RAW_CONTENT=""
+          ENCODED_CONTENT=""
+
           if [ -n "$CCE_KUBECONFIG_B64" ]; then
-            echo "$CCE_KUBECONFIG_B64" | base64 -d > "$HOME/.kube/config"
+            ENCODED_CONTENT="$CCE_KUBECONFIG_B64"
+          elif [ -n "$KUBECONFIG_B64" ]; then
+            ENCODED_CONTENT="$KUBECONFIG_B64"
+          elif [ -n "$KUBE_CONFIG_B64" ]; then
+            ENCODED_CONTENT="$KUBE_CONFIG_B64"
           elif [ -n "$CCE_KUBECONFIG" ]; then
-            printf "%s" "$CCE_KUBECONFIG" > "$HOME/.kube/config"
+            RAW_CONTENT="$CCE_KUBECONFIG"
+          elif [ -n "$KUBECONFIG" ]; then
+            RAW_CONTENT="$KUBECONFIG"
+          elif [ -n "$KUBE_CONFIG" ]; then
+            RAW_CONTENT="$KUBE_CONFIG"
           else
-            echo "Missing CCE kubeconfig secret. Set CCE_KUBECONFIG_B64 or CCE_KUBECONFIG."
+            echo "Missing kubeconfig secret."
+            echo "Provide one of: CCE_KUBECONFIG_B64, CCE_KUBECONFIG, KUBECONFIG_B64, KUBECONFIG, KUBE_CONFIG_B64, KUBE_CONFIG."
             exit 1
           fi
+
+          if [ -n "$ENCODED_CONTENT" ]; then
+            echo "$ENCODED_CONTENT" | base64 -d > "$HOME/.kube/config"
+          else
+            # If plain kubeconfig content is provided, write directly.
+            # If base64 text was put in non-_B64 secret by mistake, decode fallback.
+            if printf "%s" "$RAW_CONTENT" | grep -q "apiVersion:"; then
+              printf "%s" "$RAW_CONTENT" > "$HOME/.kube/config"
+            else
+              printf "%s" "$RAW_CONTENT" | base64 -d > "$HOME/.kube/config"
+            fi
+          fi
+
           chmod 600 "$HOME/.kube/config"
 
       - name: Verify Cluster Access
