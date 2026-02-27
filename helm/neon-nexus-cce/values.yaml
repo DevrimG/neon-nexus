@@ -7,8 +7,8 @@ qdrant:
   enabled: true
   replicaCount: 1
   image:
-    repository: swr.tr-west-1.myhuaweicloud.com/devrim/qdrant
-    tag: v1.10.1
+    repository: swr.tr-west-1.myhuaweicloud.com/devrim/dify/qdrant
+    tag: v1.10.1-amd64
   service:
     type: ClusterIP
   persistence:
@@ -27,11 +27,13 @@ frontend:
   service:
     type: NodePort
     port: 3000
+  env:
+    DIFY_API_URL: "http://dify-api-svc.dify-system.svc.cluster.local:5001/v1"
   ingress:
     enabled: true
     className: "cce"
     annotations:
-      kubernetes.io/elb.class: union
+      kubernetes.io/elb.class: performance
       kubernetes.io/elb.id: "28673c69-6733-4986-b55e-ca40ce18fecf"
       kubernetes.io/elb.port: "80"
     hosts:
@@ -51,9 +53,9 @@ backend:
     type: ClusterIP
     port: 8000
   env:
-    MCP_SSE_RAG_URL: "http://neon-nexus-rag-memory.default.svc.cluster.local:8000/sse"
-    MCP_SSE_VISION_URL: "http://neon-nexus-vision.default.svc.cluster.local:8000/sse"
-    MCP_SSE_AUDIO_URL: "http://neon-nexus-audio.default.svc.cluster.local:8000/sse"
+    MCP_SSE_RAG_URL: "http://neon-nexus-rag-memory:8000/sse"
+    MCP_SSE_VISION_URL: "http://neon-nexus-vision:8000/sse"
+    MCP_SSE_AUDIO_URL: "http://neon-nexus-audio:8000/sse"
 
 rag-memory:
   enabled: true
@@ -72,7 +74,7 @@ rag-memory:
       nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
       nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
   env:
-    QDRANT_URL: "http://neon-nexus-qdrant.default.svc.cluster.local:6333"
+    QDRANT_URL: "http://neon-nexus-qdrant:6333"
 
 vision:
   enabled: true
