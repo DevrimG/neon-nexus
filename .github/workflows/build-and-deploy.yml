@@ -95,3 +95,67 @@ jobs:
         run: |
           chmod +x dify_mirror.sh
           ./dify_mirror.sh
+
+  deploy-cce:
+    name: Deploy to Huawei CCE
+    runs-on: ubuntu-latest
+    needs:
+      - build-and-push
+      - mirror-dify
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up kubectl
+        uses: azure/setup-kubectl@v4
+        with:
+          version: "v1.30.0"
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: "v3.16.2"
+
+      - name: Configure kubeconfig
+        env:
+          CCE_KUBECONFIG_B64: ${{ secrets.CCE_KUBECONFIG_B64 }}
+          CCE_KUBECONFIG: ${{ secrets.CCE_KUBECONFIG }}
+        run: |
+          mkdir -p "$HOME/.kube"
+          if [ -n "$CCE_KUBECONFIG_B64" ]; then
+            echo "$CCE_KUBECONFIG_B64" | base64 -d > "$HOME/.kube/config"
+          elif [ -n "$CCE_KUBECONFIG" ]; then
+            printf "%s" "$CCE_KUBECONFIG" > "$HOME/.kube/config"
+          else
+            echo "Missing CCE kubeconfig secret. Set CCE_KUBECONFIG_B64 or CCE_KUBECONFIG."
+            exit 1
+          fi
+          chmod 600 "$HOME/.kube/config"
+
+      - name: Verify Cluster Access
+        run: |
+          kubectl cluster-info
+          kubectl get ns
+
+      - name: Deploy Neon Nexus Helm Release
+        run: |
+          helm upgrade --install neon-nexus ./helm/neon-nexus-cce \
+            --namespace neon-nexus \
+            --create-namespace \
+            --wait \
+            --timeout 15m \
+            -f ./helm/neon-nexus-cce/values.yaml \
+            --set frontend.image.tag=frontend-${{ github.sha }} \
+            --set backend.image.tag=backend-${{ github.sha }} \
+            --set rag-memory.image.tag=rag-memory-${{ github.sha }} \
+            --set vision.image.tag=vision-${{ github.sha }} \
+            --set audio.image.tag=audio-${{ github.sha }}
+
+      - name: Verify Workload Rollout
+        run: |
+          kubectl rollout status deployment/neon-nexus-frontend -n neon-nexus --timeout=10m
+          kubectl rollout status deployment/neon-nexus-backend -n neon-nexus --timeout=10m
+          kubectl rollout status deployment/neon-nexus-rag-memory -n neon-nexus --timeout=10m
+          kubectl rollout status deployment/neon-nexus-vision -n neon-nexus --timeout=10m
+          kubectl rollout status deployment/neon-nexus-audio -n neon-nexus --timeout=10m
